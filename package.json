@@ -35,7 +35,7 @@
   "bugs": {
     "url": "https://github.com/nslookup-io/nslookup-mcp/issues"
   },
-  "homepage": "https://github.com/nslookup-io/nslookup-mcp#readme",
+  "homepage": "https://nslookup.io",
   "engines": {
     "node": ">=18"
   },
