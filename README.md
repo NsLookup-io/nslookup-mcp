@@ -1,8 +1,17 @@
-# @nslookup-io/mcp-server
+<p align="center">
+  <a href="https://nslookup.io">
+    <img src="https://www.nslookup.io/img/logo.svg" alt="NSLookup.io" width="300" />
+  </a>
+</p>
 
-MCP (Model Context Protocol) server for DNS lookups, SSL certificate checks, security scanning, and domain intelligence — powered by [nslookup.io](https://nslookup.io).
+<p align="center">
+  <strong>MCP Server for nslookup.io</strong><br/>
+  DNS lookups, SSL certificate checks, security scanning, and domain intelligence — via the Model Context Protocol.
+</p>
 
-Lets AI assistants like Claude perform real-time DNS queries across 53 record types and 18+ global DNS servers, check SSL certificates, scan for security issues, and more.
+<p align="center">
+  <a href="https://nslookup.io">Website</a> · <a href="https://docs.nslookup.io">API Docs</a> · <a href="https://www.npmjs.com/package/@nslookup-io/mcp-server">npm</a> · <a href="https://nslookup.io/contact-us/">Contact</a>
+</p>
 
 ## Tools
 
