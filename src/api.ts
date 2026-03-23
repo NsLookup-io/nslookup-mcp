@@ -13,7 +13,8 @@ export async function apiGet(
   params: Record<string, string>,
   options: ApiOptions = {}
 ): Promise<unknown> {
-  const url = new URL(path, getApiUrl());
+  const base = getApiUrl().replace(/\/+$/, "");
+  const url = new URL(`${base}${path}`);
   for (const [key, value] of Object.entries(params)) {
     if (value) url.searchParams.set(key, value);
   }
@@ -50,7 +51,8 @@ export async function apiPost(
   body: Record<string, unknown>,
   options: ApiOptions = {}
 ): Promise<unknown> {
-  const url = new URL(path, getApiUrl());
+  const base = getApiUrl().replace(/\/+$/, "");
+  const url = new URL(`${base}${path}`);
 
   const controller = new AbortController();
   const timeout = setTimeout(
