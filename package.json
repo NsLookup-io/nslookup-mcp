@@ -1,10 +1,11 @@
 {
   "name": "@nslookup-io/mcp-server",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "mcpName": "io.github.venomseven/nslookup",
   "description": "MCP server for DNS lookups, propagation checks, and certificate monitoring via nslookup.io",
   "main": "dist/index.js",
   "bin": {
+    "mcp-server": "dist/index.js",
     "nslookup-mcp": "dist/index.js",
     "nslookup-mcp-http": "dist/http.js"
   },
