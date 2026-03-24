@@ -32,6 +32,7 @@
 | `bimi_vmc` | Check BIMI record and VMC (Verified Mark Certificate) — logo URL, trademark info, certificate expiry |
 | `security_scan` | Scan a domain for security issues — SPF/DKIM/DMARC, cookie security, DNS misconfigurations |
 | `uptime_check` | One-time HTTP uptime check — status, response time, HTTP status code |
+| `uptime_check_multi` | Check if a site is up from 7 global locations — Amsterdam, Sydney, London, Frankfurt, Delhi, Warsaw, South Carolina |
 
 ## Setup
 
@@ -162,6 +163,7 @@ Once connected, try asking your AI assistant:
 - "Does google.com have a BIMI record?"
 - "Run a security scan on example.com"
 - "Is https://cloudflare.com up right now?"
+- "Check if github.com is accessible from all global locations"
 - "Check DNS propagation for example.com NS records across all global servers"
 
 ## Feedback

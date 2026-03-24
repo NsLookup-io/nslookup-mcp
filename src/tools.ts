@@ -300,7 +300,7 @@ export function registerTools(server: McpServer): void {
   // Tool 8: Uptime Check — perform a one-time HTTP availability check
   server.tool(
     "uptime_check",
-    "Perform a one-time HTTP uptime check on a URL. Returns whether the site is up or down, HTTP status code, and response time in milliseconds.",
+    "Perform a one-time HTTP uptime check on a URL from a single location. Returns whether the site is up or down, HTTP status code, and response time in milliseconds. For multi-location checks, use uptime_check_multi instead.",
     {
       url: z.string().describe("Full URL to check (e.g. https://github.com)"),
       timeout: z
@@ -317,6 +317,42 @@ export function registerTools(server: McpServer): void {
           "/v1/uptime/check",
           body,
           { prefix: "/portal-api", timeout: 30000 }
+        );
+        return { content: [{ type: "text", text: formatJson(result) }] };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool 9: Multi-Location Uptime Check — check from 7 global locations
+  server.tool(
+    "uptime_check_multi",
+    "Check if a website is up or down from 7 global locations simultaneously: Amsterdam, Sydney, London, Frankfurt, Delhi, Warsaw, and South Carolina. Returns status, response time, and HTTP status code for each location.",
+    {
+      url: z.string().describe("Full URL to check (e.g. https://github.com)"),
+      timeout: z
+        .number()
+        .optional()
+        .describe("Timeout in milliseconds (default: 30000)"),
+    },
+    async ({ url, timeout: checkTimeout }) => {
+      try {
+        const body: Record<string, unknown> = { url };
+        if (checkTimeout) body.timeout = checkTimeout;
+
+        const result = await apiPost(
+          "/v1/uptime/check-multi",
+          body,
+          { prefix: "/portal-api", timeout: 60000 }
         );
         return { content: [{ type: "text", text: formatJson(result) }] };
       } catch (error) {
