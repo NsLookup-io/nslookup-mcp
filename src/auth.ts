@@ -15,13 +15,23 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
  *    the backend accepts.
  */
 
+// Token issuer used for JWT validation (signature via JWKS, issuer, exp).
 export const KEYCLOAK_ISSUER = (
   process.env.KEYCLOAK_ISSUER || "https://auth.nslookup.io/realms/nslookup-io"
 ).replace(/\/+$/, "");
 
-export const MCP_RESOURCE_URL = (
-  process.env.MCP_RESOURCE_URL || "https://mcp.nslookup.io"
+// Keycloak realm base URL used to fetch the realm's openid-configuration for
+// the self-issued authorization-server metadata. For Keycloak the realm URL
+// IS the token issuer, so this defaults to KEYCLOAK_ISSUER (back-compat) and
+// KEYCLOAK_REALM_URL only needs setting if the two ever diverge.
+export const KEYCLOAK_REALM_URL = (
+  process.env.KEYCLOAK_REALM_URL || KEYCLOAK_ISSUER
 ).replace(/\/+$/, "");
+
+// The single pre-registered PUBLIC Keycloak client returned by the DCR shim.
+// (A public client is required — no Keycloak DCR is enabled.)
+export const KEYCLOAK_CLIENT_ID =
+  process.env.KEYCLOAK_CLIENT_ID || "nslookup-io-mcp";
 
 export const RESOURCE_DOCUMENTATION = "https://www.nslookup.io/mcp";
 
@@ -88,19 +98,14 @@ export async function authenticateHeader(
   }
 }
 
-/** RFC 9728 protected-resource metadata document. */
-export function protectedResourceMetadata(): Record<string, unknown> {
-  return {
-    resource: MCP_RESOURCE_URL,
-    authorization_servers: [KEYCLOAK_ISSUER],
-    bearer_methods_supported: ["header"],
-    resource_documentation: RESOURCE_DOCUMENTATION,
-  };
-}
-
-/** WWW-Authenticate challenge pointing clients at the resource metadata. */
-export function wwwAuthenticateChallenge(): string {
-  return `Bearer resource_metadata="${MCP_RESOURCE_URL}/.well-known/oauth-protected-resource"`;
+/**
+ * WWW-Authenticate challenge pointing clients at OUR protected-resource
+ * metadata. `serverOrigin` is the request-derived (or MCP_RESOURCE_URL-
+ * overridden) origin of this server, so the challenge chains through our own
+ * well-known documents rather than jumping straight to Keycloak.
+ */
+export function wwwAuthenticateChallenge(serverOrigin: string): string {
+  return `Bearer resource_metadata="${serverOrigin}/.well-known/oauth-protected-resource"`;
 }
 
 interface JsonRpcMessage {

@@ -9,9 +9,12 @@ import {
   authenticateHeader,
   extractRequestId,
   isPortalToolCall,
-  protectedResourceMetadata,
   wwwAuthenticateChallenge,
+  KEYCLOAK_REALM_URL,
+  KEYCLOAK_CLIENT_ID,
+  RESOURCE_DOCUMENTATION,
 } from "./auth.js";
+import { createOAuthMetadataRouter, getServerOrigin } from "./oauth-metadata.js";
 
 const PORT = parseInt(process.env.PORT || "3100", 10);
 
@@ -22,7 +25,7 @@ function createServer(getToken: () => string | undefined): McpServer {
   const server = new McpServer(
     {
       name: "nslookup",
-      version: "1.5.0",
+      version: "1.6.0",
       description:
         "DNS and domain intelligence tools powered by nslookup.io. Look up any of 53 DNS record types, check DNS propagation across 18+ global servers, inspect SSL/TLS certificates, verify BIMI/VMC records, run security scans (SPF/DKIM/DMARC, cookies, headers), and test website availability from 7 locations worldwide (Amsterdam, Sydney, London, Frankfurt, Delhi, Warsaw, South Carolina). Public checks are real-time, stateless, and require no authentication; my_* tools read your own NsLookup.io monitoring account after sign-in.",
     },
@@ -34,6 +37,9 @@ function createServer(getToken: () => string | undefined): McpServer {
 }
 
 const app = express();
+// Behind the TLS terminator at mcp.nslookup.io, so req.protocol reflects
+// X-Forwarded-Proto (https) — needed for correct self-issued OAuth origins.
+app.set("trust proxy", 1);
 app.use(express.json());
 
 // CORS — needed for browser-based MCP clients
@@ -52,13 +58,23 @@ app.use((req, res, next) => {
   next();
 });
 
-// RFC 9728 OAuth protected-resource metadata. Served at the bare well-known
-// path AND with the /mcp suffix — clients derive the URL either way.
-const serveResourceMetadata = (_req: express.Request, res: express.Response) => {
-  res.json(protectedResourceMetadata());
-};
-app.get("/.well-known/oauth-protected-resource", serveResourceMetadata);
-app.get("/.well-known/oauth-protected-resource/mcp", serveResourceMetadata);
+// OAuth well-known metadata + DCR shim. Public, CORS-open (handled above),
+// no auth. Serves:
+//  - /.well-known/oauth-protected-resource (+ /mcp) — RFC 9728, authorization
+//    server = OUR origin (so the AS-metadata trick chains);
+//  - /.well-known/oauth-authorization-server — self-issued: issuer = OUR
+//    origin, real Keycloak auth/token endpoints, registration_endpoint = /register;
+//  - POST /register + /oauth/register — DCR shim returning the fixed public
+//    Keycloak client. This lets DCR-only clients (Claude web/desktop, Claude
+//    Code) connect against ONE pre-registered public client without enabling
+//    Keycloak DCR.
+app.use(
+  createOAuthMetadataRouter({
+    keycloakRealmUrl: KEYCLOAK_REALM_URL,
+    clientId: KEYCLOAK_CLIENT_ID,
+    resourceDocumentation: RESOURCE_DOCUMENTATION,
+  })
+);
 
 // Stateless MCP endpoint — new server + transport per request.
 // Anonymous requests work for everything except my_* tool calls, which get
@@ -70,7 +86,7 @@ app.post("/mcp", async (req, res) => {
     if (!auth.authenticated && isPortalToolCall(req.body)) {
       res
         .status(401)
-        .set("WWW-Authenticate", wwwAuthenticateChallenge())
+        .set("WWW-Authenticate", wwwAuthenticateChallenge(getServerOrigin(req)))
         .json({
           jsonrpc: "2.0",
           error: {

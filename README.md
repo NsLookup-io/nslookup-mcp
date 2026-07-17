@@ -68,6 +68,7 @@
 #### How authentication works
 
 - **Hosted connector (`https://mcp.nslookup.io/mcp`)** — OAuth 2.1. The server is an OAuth *resource server*: calling a `my_` tool without credentials returns a `401` with a `WWW-Authenticate` challenge pointing at `/.well-known/oauth-protected-resource`, and OAuth-capable MCP clients (Claude, etc.) then walk you through sign-in against the NsLookup.io identity provider. Everything else keeps working anonymously.
+  - **Sign-in works for DCR-only clients (Claude web/desktop, Claude Code) without enabling Keycloak DCR.** The server acts as its own OAuth *authorization server* for metadata purposes: `GET /.well-known/oauth-authorization-server` returns an `issuer` equal to this server's own origin, with `authorization_endpoint`/`token_endpoint` pointing at the **real Keycloak** endpoints (fetched from the realm's OpenID configuration, cached with a static fallback) and `registration_endpoint` set to `<origin>/register`. Because the advertised `issuer` is this server, clients that compute `{issuer}/register` hit our **Dynamic Client Registration (DCR) shim** at `POST /register` (also `POST /oauth/register`), which ignores the submitted metadata and returns one **pre-registered public Keycloak client** (`KEYCLOAK_CLIENT_ID`, default `nslookup-io-mcp`) with `token_endpoint_auth_method: "none"`, echoing back the requested redirect URIs. The browser sign-in and the PKCE `code`→token exchange still happen directly on Keycloak. **A public client with `KEYCLOAK_CLIENT_ID` must already exist in the realm** (redirect URIs allow-listed for your clients); no Keycloak DCR endpoint is used or exposed.
 - **API token** — instead of OAuth you can send a personal access token (created in the portal under *API Tokens*, format `nslk_...`) as `Authorization: Bearer nslk_...`.
 - **Local / stdio** — no OAuth flow; set the `NSLOOKUP_API_TOKEN` environment variable to an `nslk_...` token (or a raw access token) and the `my_` tools pick it up.
 
@@ -198,8 +199,10 @@ A, AAAA, AFSDB, APL, AXFR, CAA, CDNSKEY, CDS, CERT, CNAME, CSYNC, DHCID, DLV, DN
 |---------------------|---------|-------------|
 | `NSLOOKUP_API_URL` | `https://www.nslookup.io` | Base URL for the nslookup.io API |
 | `NSLOOKUP_API_TOKEN` | — | Credential for the `my_` account tools when running locally (stdio): an `nslk_...` API token or a raw access token |
-| `MCP_RESOURCE_URL` | `https://mcp.nslookup.io` | (HTTP server) Public URL of this resource server, used in OAuth metadata |
-| `KEYCLOAK_ISSUER` | `https://auth.nslookup.io/realms/nslookup-io` | (HTTP server) OAuth issuer used to validate sign-in tokens |
+| `MCP_RESOURCE_URL` | *(request-derived)* | (HTTP server) Explicit public origin of this resource server, used as the `issuer`/`resource`/`authorization_servers` value in OAuth metadata. When unset, the origin is derived from the incoming request (`X-Forwarded-Proto` + host). Set it to the fixed public URL (e.g. `https://mcp.nslookup.io`) in production. |
+| `KEYCLOAK_ISSUER` | `https://auth.nslookup.io/realms/nslookup-io` | (HTTP server) OAuth token issuer used to validate sign-in JWTs (JWKS, issuer, exp) |
+| `KEYCLOAK_REALM_URL` | *(= `KEYCLOAK_ISSUER`)* | (HTTP server) Keycloak realm base URL whose `/.well-known/openid-configuration` supplies the real `authorization_endpoint`/`token_endpoint`. For Keycloak this equals the issuer, so it rarely needs setting. |
+| `KEYCLOAK_CLIENT_ID` | `nslookup-io-mcp` | (HTTP server) The pre-registered **public** Keycloak client id returned by the DCR shim. This client must already exist in the realm; no Keycloak DCR is enabled. |
 
 ## Example Prompts
 

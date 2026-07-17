@@ -11,7 +11,7 @@ const INSTRUCTIONS =
 const server = new McpServer(
   {
     name: "nslookup",
-    version: "1.5.0",
+    version: "1.6.0",
     description:
       "DNS and domain intelligence tools powered by nslookup.io. Look up any of 53 DNS record types, check DNS propagation across 18+ global servers, inspect SSL/TLS certificates, verify BIMI/VMC records, run security scans (SPF/DKIM/DMARC, cookies, headers), and test website availability from 7 locations worldwide (Amsterdam, Sydney, London, Frankfurt, Delhi, Warsaw, South Carolina). Public checks are real-time, stateless, and require no authentication; my_* tools read your own NsLookup.io monitoring account after sign-in.",
   },

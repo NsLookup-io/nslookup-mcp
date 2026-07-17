@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Smoke test for the OAuth resource-server plumbing + portal (my_) tools.
+ * Smoke test for the OAuth resource-server plumbing + DCR shim + portal (my_)
+ * tools.
  *
  * Spins the built HTTP server (dist/http.js) on a random port and asserts:
  *  (a) anonymous tools/list returns all 23 tools, my_ ones carrying the
@@ -9,8 +10,16 @@
  *      challenge (and the same with an invalid JWT), while tools/list stays
  *      anonymous-accessible with a garbage token;
  *  (c) both well-known protected-resource metadata routes serve the RFC 9728
- *      document;
- *  (d) a public tool (rdap_lookup 8.8.8.8) still works anonymously (live call).
+ *      document with authorization_servers pointing at OUR origin;
+ *  (d) the self-issued authorization-server metadata: issuer == our origin,
+ *      registration_endpoint == our-origin/register, and real Keycloak
+ *      auth/token endpoints;
+ *  (e) the DCR shim (POST /register) returns 201 with the fixed public
+ *      Keycloak client_id;
+ *  (f) a public tool (rdap_lookup 8.8.8.8) still works anonymously (live call).
+ *
+ * MCP_RESOURCE_URL is deliberately left UNSET so the server derives its origin
+ * from the request (http://127.0.0.1:PORT), which is what these checks expect.
  *
  * Usage: npm run build && node scripts/smoke-auth.mjs
  */
@@ -83,8 +92,10 @@ async function waitForHealth(proc) {
   throw new Error("server did not become healthy");
 }
 
+const childEnv = { ...process.env, PORT: String(PORT) };
+delete childEnv.MCP_RESOURCE_URL; // force request-derived origin (127.0.0.1:PORT)
 const server = spawn("node", [path.join(root, "dist/http.js")], {
-  env: { ...process.env, PORT: String(PORT) },
+  env: childEnv,
   stdio: ["ignore", "pipe", "pipe"],
 });
 server.stderr.on("data", (d) => process.stderr.write(`[server] ${d}`));
@@ -93,7 +104,7 @@ try {
   await waitForHealth(server);
   console.log(`Server up on :${PORT}\n`);
 
-  // (c) well-known metadata — both paths
+  // (c) well-known protected-resource metadata — both paths
   console.log("(c) protected-resource metadata");
   for (const suffix of ["", "/mcp"]) {
     const res = await fetch(`${BASE}/.well-known/oauth-protected-resource${suffix}`);
@@ -101,13 +112,63 @@ try {
     check(`GET well-known${suffix || " (bare)"} → 200`, res.status === 200);
     check(
       `  shape${suffix}`,
-      typeof meta.resource === "string" &&
+      meta.resource === `${BASE}${suffix}` &&
         Array.isArray(meta.authorization_servers) &&
-        meta.authorization_servers[0]?.includes("/realms/") &&
+        meta.authorization_servers[0] === BASE &&
+        Array.isArray(meta.scopes_supported) &&
         Array.isArray(meta.bearer_methods_supported) &&
-        meta.bearer_methods_supported.includes("header") &&
-        typeof meta.resource_documentation === "string",
+        meta.bearer_methods_supported.includes("header"),
       JSON.stringify(meta)
+    );
+  }
+
+  // (d) self-issued authorization-server metadata + DCR shim
+  console.log("(d) authorization-server metadata (self-issued)");
+  const asRes = await fetch(`${BASE}/.well-known/oauth-authorization-server`);
+  const as = asRes.ok ? await asRes.json() : {};
+  check("GET oauth-authorization-server → 200", asRes.status === 200);
+  check("issuer == our origin", as.issuer === BASE, `issuer=${as.issuer}`);
+  check(
+    "registration_endpoint == origin/register",
+    as.registration_endpoint === `${BASE}/register`,
+    `got ${as.registration_endpoint}`
+  );
+  check(
+    "real Keycloak auth/token endpoints",
+    typeof as.authorization_endpoint === "string" &&
+      as.authorization_endpoint.includes("/realms/") &&
+      as.authorization_endpoint.includes("/protocol/openid-connect/") &&
+      typeof as.token_endpoint === "string" &&
+      as.token_endpoint.includes("/protocol/openid-connect/"),
+    `auth=${as.authorization_endpoint} token=${as.token_endpoint}`
+  );
+  check(
+    "PKCE S256 + none auth + code flow advertised",
+    as.token_endpoint_auth_methods_supported?.includes("none") &&
+      as.code_challenge_methods_supported?.includes("S256") &&
+      as.response_types_supported?.includes("code"),
+    JSON.stringify(as)
+  );
+
+  console.log("(e) DCR shim");
+  for (const regPath of ["/register", "/oauth/register"]) {
+    const reg = await fetch(`${BASE}${regPath}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_name: "smoke-client",
+        redirect_uris: ["https://claude.ai/api/mcp/auth_callback"],
+      }),
+    });
+    const regBody = reg.ok || reg.status === 201 ? await reg.json() : {};
+    check(
+      `POST ${regPath} → 201 client_id=nslookup-io-mcp`,
+      reg.status === 201 &&
+        regBody.client_id === "nslookup-io-mcp" &&
+        regBody.token_endpoint_auth_method === "none" &&
+        Array.isArray(regBody.redirect_uris) &&
+        regBody.redirect_uris[0] === "https://claude.ai/api/mcp/auth_callback",
+      `status ${reg.status}: ${JSON.stringify(regBody)}`
     );
   }
 
@@ -174,8 +235,8 @@ try {
     `got ${pat.status}`
   );
 
-  // (d) public tool still callable anonymously (live upstream call)
-  console.log("(d) public tool anonymous (live)");
+  // (f) public tool still callable anonymously (live upstream call)
+  console.log("(f) public tool anonymous (live)");
   const pub = await toolCall("rdap_lookup", { query: "8.8.8.8" });
   const pubText = pub.rpc?.result?.content?.[0]?.text ?? "";
   check(
