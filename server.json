@@ -6,12 +6,12 @@
     "url": "https://github.com/NsLookup-io/nslookup-mcp",
     "source": "github"
   },
-  "version": "1.3.0",
+  "version": "1.4.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@nslookup-io/mcp-server",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "transport": {
         "type": "stdio"
       }

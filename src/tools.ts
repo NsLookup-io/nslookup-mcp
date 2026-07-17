@@ -79,6 +79,55 @@ function formatJson(data: unknown): string {
   return JSON.stringify(data, null, 2);
 }
 
+/**
+ * Trim the (large) public status page payload down to the useful summary:
+ * page identity, overall status, per-component status, and active incidents.
+ * Per-day history bars and per-location breakdowns are dropped.
+ */
+function summarizeStatusPage(data: unknown): unknown {
+  if (!data || typeof data !== "object") return data;
+  const page = data as Record<string, unknown>;
+  if (!Array.isArray(page.components)) return data;
+
+  const components = (page.components as Array<Record<string, unknown>>).map(
+    (c) => ({
+      name: c.name,
+      status: c.status,
+      uptimePercentage: c.uptimePercentage,
+      avgResponseMs: c.avgResponseMs,
+      group: c.group,
+      isExternal: c.isExternal,
+    })
+  );
+
+  const incidents = Array.isArray(page.incidents)
+    ? (page.incidents as Array<Record<string, unknown>>)
+    : [];
+  const activeIncidents = incidents
+    .filter((i) => i.status !== "resolved" && !i.resolvedAt)
+    .map((i) => ({
+      title: i.title,
+      status: i.status,
+      impact: i.impact,
+      isMaintenance: i.isMaintenance,
+      startedAt: i.startedAt,
+      affectedComponents: i.affectedComponents,
+    }));
+
+  return {
+    name: page.name,
+    description: page.description,
+    verifiedDomain: page.verifiedDomain,
+    overallStatus: page.overallStatus,
+    statusMessage: page.statusMessage,
+    overallUptimePercentage: page.overallUptimePercentage,
+    components,
+    activeIncidents,
+    recentResolvedIncidents: incidents.length - activeIncidents.length,
+    lastUpdated: page.lastUpdated,
+  };
+}
+
 export function registerTools(server: McpServer): void {
   // Tool 1: DNS Lookup — get common records (A, AAAA, NS, MX, TXT, CNAME, SOA)
   server.tool(
@@ -413,6 +462,261 @@ export function registerTools(server: McpServer): void {
           { prefix: "/portal-api", timeout: 15000 }
         );
         return { content: [{ type: "text", text: formatJson(result) }] };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool 12: RDAP Lookup — registration data for an IP, ASN, or domain
+  server.tool(
+    "rdap_lookup",
+    "Look up registration data (RDAP — the successor to WHOIS) for an IP address, AS number, or domain name. The query type is detected automatically. Returns the owning organization, network range/CIDR, RIR (ARIN, RIPE, APNIC, LACNIC, AFRINIC), country, status, registration/last-changed dates, nameservers, and abuse/registrant contacts, plus the raw RDAP JSON.",
+    {
+      query: z
+        .string()
+        .describe(
+          "What to look up: an IPv4/IPv6 address (e.g. 8.8.8.8), an AS number (e.g. AS13335 or 13335), or a domain name (e.g. example.com)"
+        ),
+    },
+    async ({ query }) => {
+      try {
+        const result = await apiGet(
+          "/v1/rdap/lookup",
+          { q: query },
+          { timeout: 20000 }
+        );
+        return { content: [{ type: "text", text: formatJson(result) }] };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool 13: Hosting Report — who hosts a website
+  server.tool(
+    "hosting_report",
+    "Find out who hosts a website. Returns the hosting provider, IP/ASN/network owner, server location, DNS/nameserver provider, CDN or proxy detection (Cloudflare, Fastly, etc.), SSL certificate issuer, and mail servers/provider for a domain in one combined report.",
+    {
+      domain: z
+        .string()
+        .describe(
+          "Domain or URL to build a hosting report for (e.g. github.com). URLs are normalized to a bare hostname."
+        ),
+    },
+    async ({ domain }) => {
+      try {
+        const result = await apiGet(
+          "/v1/hosting-report",
+          { domain },
+          { timeout: 30000 }
+        );
+        return { content: [{ type: "text", text: formatJson(result) }] };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool 14: Domain Scanner — email security posture scan
+  server.tool(
+    "domain_scanner",
+    "Scan a domain's email security posture: SPF, DKIM, DMARC, and BIMI configuration. Returns per-indicator scores and detected issues so you can see how well the domain is protected against spoofing and phishing.",
+    {
+      domain: z.string().describe("Domain name to scan (e.g. example.com)"),
+    },
+    async ({ domain }) => {
+      try {
+        const result = await apiGet(
+          "/v1/domain-scanner",
+          { domain },
+          { timeout: 30000 }
+        );
+        return { content: [{ type: "text", text: formatJson(result) }] };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool 15: DNS Change Review — deterministic DNS-change linter
+  server.tool(
+    "dns_change_review",
+    "Review proposed DNS changes BEFORE applying them. Compares a domain's current public DNS with a proposed future state, returns a diff, deterministic rule-based findings (SPF/DMARC/MX/CAA/DNSSEC pitfalls, dangling records, mail breakage, etc.) with suggested fixes, and an overall 0-100 risk score. Stateless — nothing is stored.",
+    {
+      domain: z
+        .string()
+        .describe(
+          "Domain whose current public DNS will be compared against the proposed records (e.g. example.com)"
+        ),
+      records: z
+        .union([
+          z
+            .string()
+            .describe(
+              "Proposed DNS records as BIND zone-file text, e.g. 'example.com. 300 IN MX 10 mail.example.com.'"
+            ),
+          z
+            .array(
+              z.object({
+                type: z
+                  .string()
+                  .describe("Record type, e.g. A, AAAA, MX, TXT, CNAME, NS, CAA"),
+                name: z
+                  .string()
+                  .optional()
+                  .describe(
+                    "Record name — subdomain, FQDN, or '@' for the apex (default: '@')"
+                  ),
+                value: z
+                  .string()
+                  .describe(
+                    "Record value, e.g. '93.184.216.34' or 'v=spf1 include:_spf.google.com ~all'"
+                  ),
+                ttl: z.number().optional().describe("TTL in seconds"),
+                priority: z
+                  .number()
+                  .optional()
+                  .describe("Priority (MX/SRV records)"),
+              })
+            )
+            .describe("Proposed DNS records as a structured array"),
+        ])
+        .describe(
+          "The proposed (future) DNS state: either BIND zone-file text or an array of {type, name?, value, ttl?, priority?} records. This is the COMPLETE desired state for the zone — records present now but omitted here are treated as deletions."
+        ),
+      server: z
+        .enum(DNS_SERVERS)
+        .optional()
+        .describe(
+          "DNS server to use when fetching the current records. Default: cloudflare."
+        ),
+    },
+    async ({ domain, records, server: dnsServer }) => {
+      try {
+        const body: Record<string, unknown> = { domain };
+        if (typeof records === "string") {
+          body.proposed = records;
+          body.format = "auto";
+        } else {
+          body.proposed = JSON.stringify(records);
+          body.format = "json";
+        }
+        if (dnsServer) body.server = dnsServer;
+
+        const result = await apiPost("/v1/dns-change-review", body, {
+          timeout: 45000,
+        });
+        return { content: [{ type: "text", text: formatJson(result) }] };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool 16: BIMI Check — BIMI DNS record only (no VMC certificate fetch)
+  server.tool(
+    "bimi_check",
+    "Check only the BIMI (Brand Indicators for Message Identification) DNS record for a domain — faster than bimi_vmc because it skips the VMC certificate download and validation. Returns the BIMI record at default._bimi.<domain>, logo URL, and authority (VMC) URL if declared.",
+    {
+      domain: z.string().describe("Domain name to check the BIMI record for (e.g. easydmarc.com)"),
+    },
+    async ({ domain }) => {
+      try {
+        const result = await apiPost(
+          "/v1/vmc/check-bimi",
+          { domain },
+          { prefix: "/portal-api", timeout: 15000 }
+        );
+        return { content: [{ type: "text", text: formatJson(result) }] };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Tool 17: Status Page — read a public status page
+  server.tool(
+    "status_page",
+    "Read a public status page hosted on nslookup.io status pages. Returns the page name, overall status, per-component status and uptime, and active incidents/maintenance. Look up by slug (pages served at hosted.nslookup.io/<slug>) or by the custom domain the page is served on. Provide exactly one of slug or domain.",
+    {
+      slug: z
+        .string()
+        .optional()
+        .describe("Status page slug (e.g. 'nslookup-io' for hosted.nslookup.io/nslookup-io)"),
+      domain: z
+        .string()
+        .optional()
+        .describe("Custom domain the status page is served on (e.g. status.acme.com)"),
+    },
+    async ({ slug, domain }) => {
+      try {
+        if ((slug ? 1 : 0) + (domain ? 1 : 0) !== 1) {
+          throw new Error("Provide exactly one of 'slug' or 'domain'.");
+        }
+
+        const result = slug
+          ? await apiGet(
+              `/v1/status-pages/public/${encodeURIComponent(slug)}`,
+              {},
+              { prefix: "/portal-api", timeout: 15000 }
+            )
+          : await apiGet(
+              "/v1/status-pages/public/by-domain",
+              { domain: domain as string },
+              { prefix: "/portal-api", timeout: 15000 }
+            );
+        return {
+          content: [{ type: "text", text: formatJson(summarizeStatusPage(result)) }],
+        };
       } catch (error) {
         return {
           content: [

@@ -23,6 +23,15 @@
 | `dns_record` | Look up a specific DNS record type — supports all 53 types (HTTPS, DNSKEY, TLSA, SPF, etc.) |
 | `dns_propagation` | Check DNS propagation across 18+ global servers (Cloudflare, Google, Quad9, regional, authoritative) |
 | `webservers` | Get IPv4 and IPv6 addresses for a domain |
+| `dns_change_review` | **NEW** — Review proposed DNS changes before applying them: diff vs current DNS, rule-based findings with fixes, and a 0–100 risk score |
+
+### Domain Intelligence Tools
+
+| Tool | Description |
+|------|-------------|
+| `rdap_lookup` | **NEW** — Registration data (RDAP) for an IP, AS number, or domain — owner org, network range, RIR, contacts, dates |
+| `hosting_report` | **NEW** — Who hosts a website: hosting provider, CDN/proxy, DNS provider, mail servers, server location, SSL issuer |
+| `status_page` | **NEW** — Read a public status page (by slug or custom domain): overall status, components, active incidents |
 
 ### DNS Health & Security Tools
 
@@ -31,7 +40,9 @@
 | `dns_health` | **NEW** — Run a DNS health audit (39 checks across DNSSEC, MX, hygiene, TTL, nameservers, CAA, operational maturity) with severity-weighted scoring |
 | `ssl_certificate` | Check SSL/TLS certificate — issuer, expiry, chain validity, cipher strength, SAN domains, TLS version |
 | `bimi_vmc` | Check BIMI record and VMC (Verified Mark Certificate) — logo URL, trademark info, certificate expiry |
+| `bimi_check` | **NEW** — Check only the BIMI DNS record (faster — skips the VMC certificate fetch) |
 | `security_scan` | Scan a domain for security issues — SPF/DKIM/DMARC, cookie security, DNS misconfigurations |
+| `domain_scanner` | **NEW** — Scan a domain's email security posture (SPF, DKIM, DMARC, BIMI) with per-indicator scores |
 | `uptime_check` | One-time HTTP uptime check — status, response time, HTTP status code |
 | `uptime_check_multi` | Check if a site is up from 7 global locations — Amsterdam, Sydney, London, Frankfurt, Delhi, Warsaw, South Carolina |
 
@@ -56,7 +67,7 @@ The easiest way to get started. No installation required.
    - **URL:** `https://mcp.nslookup.io/mcp`
 6. Click **Add** to confirm
 
-Done — Claude can now use all 11 DNS, security, and health tools. Try asking _"Run a DNS health check on github.com"_.
+Done — Claude can now use all 17 DNS, security, and health tools. Try asking _"Run a DNS health check on github.com"_.
 
 ### ChatGPT
 
@@ -178,6 +189,13 @@ Once connected, try asking your AI assistant:
 - "Check the GEO score for github.com"
 - "Is example.com optimized for AI search engines?"
 - "Which AI crawlers does cloudflare.com block?"
+- "Who owns the IP 8.8.8.8?"
+- "Look up registration data for AS13335"
+- "Who hosts github.com?"
+- "Review this DNS change for example.com before I apply it: ..."
+- "Does easydmarc.com have a BIMI record?"
+- "Scan example.com's email security (SPF, DKIM, DMARC)"
+- "Is the nslookup-io status page reporting any incidents?"
 
 ## Feedback
 
