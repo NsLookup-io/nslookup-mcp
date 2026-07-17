@@ -1,6 +1,6 @@
 {
   "name": "@nslookup-io/mcp-server",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "mcpName": "io.github.venomseven/nslookup",
   "description": "MCP server for DNS lookups (53 record types), DNS health reports (39 checks), global propagation checks, RDAP registration data, hosting reports, DNS change review, SSL/TLS certificates, BIMI/VMC, security scans, GEO (AI readiness) scoring, multi-location uptime monitoring, and public status pages via nslookup.io",
   "main": "dist/index.js",

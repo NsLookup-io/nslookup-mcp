@@ -83,6 +83,31 @@ app.post("/mcp", async (req, res) => {
   try {
     const auth = await authenticateHeader(req.headers.authorization);
 
+    // Lightweight request/auth trace (no token contents) — diagnoses OAuth issues.
+    const rawAuth = req.headers.authorization;
+    const authShape = !rawAuth
+      ? "none"
+      : Array.isArray(rawAuth)
+        ? "array"
+        : /^bearer\s+nslk_/i.test(rawAuth)
+          ? "pat"
+          : /^bearer\s+/i.test(rawAuth)
+            ? "jwt"
+            : "other";
+    const toolName =
+      req.body && typeof req.body === "object" && !Array.isArray(req.body)
+        ? (req.body as { params?: { name?: unknown } }).params?.name
+        : undefined;
+    const method =
+      req.body && typeof req.body === "object" && !Array.isArray(req.body)
+        ? (req.body as { method?: unknown }).method
+        : undefined;
+    console.log(
+      `[mcp] method=${String(method)} tool=${String(toolName)} authHeader=${authShape} ` +
+        `authenticated=${auth.authenticated} authMethod=${auth.method ?? "-"}` +
+        (auth.reason ? ` reason="${auth.reason}"` : "")
+    );
+
     if (!auth.authenticated && isPortalToolCall(req.body)) {
       res
         .status(401)
