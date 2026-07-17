@@ -34,9 +34,31 @@ There are two ways to connect. **Pick one** — see the [note below](#-use-only-
 | Transport | Streamable HTTP (remote) | stdio (runs on your machine) |
 | Install | Nothing to install | Requires Node.js 18+ |
 | 17 public tools | ✅ Anonymous | ✅ Anonymous |
-| 6 `my_` account tools | ✅ **Browser sign-in (OAuth)** on first use | ⚠️ Needs a `NSLOOKUP_API_TOKEN` (not generally available yet) |
+| 6 `my_` account tools | ✅ **Browser sign-in (OAuth)** on first use | ❌ Not available locally — use the hosted connector |
 
 **Use the hosted endpoint if you want your own monitoring data** — it's the only mode where the `my_` account tools sign in for you, right in the browser. The local mode is great for the 17 public tools with zero setup.
+
+### Connect for your account (portal) tools
+
+To use **your own NsLookup.io monitoring data** (the 6 `my_` account tools), add the **hosted connector** and sign in. **There is no API key** — authentication is a one-time browser sign-in (OAuth) against your nslookup.io account.
+
+**Claude Code (CLI)**
+
+```bash
+claude mcp add --transport http nslookup https://mcp.nslookup.io/mcp
+```
+
+Then invoke an account tool — e.g. ask _"show my monitoring overview"_. A browser sign-in window appears; after you sign in once, all 6 `my_` tools work (the client remembers it).
+
+**Claude Desktop / claude.ai** — add a custom connector with URL `https://mcp.nslookup.io/mcp`, then sign in when prompted.
+
+**`.mcp.json`** (project) or any HTTP-capable client:
+
+```json
+{ "mcpServers": { "nslookup": { "type": "http", "url": "https://mcp.nslookup.io/mcp" } } }
+```
+
+The 17 public tools work immediately over this same endpoint — you only sign in the first time you reach for your own data.
 
 ### Hosted (recommended)
 
@@ -92,7 +114,7 @@ Add to your MCP config (`.cursor/mcp.json`, `~/.codeium/windsurf/mcp_config.json
 
 ### Local (npx / stdio)
 
-Runs the server on your machine over stdio. All **17 public tools** work with no auth. (The `my_` account tools need a `NSLOOKUP_API_TOKEN` on this transport — see [Signing in](#signing-in) — so for account data, prefer the hosted endpoint.)
+Runs the server on your machine over stdio. **Public tools only** — all **17 public tools** work with no auth. For your own monitoring data (the `my_` account tools), use the [hosted connector](#connect-for-your-account-portal-tools) and sign in — the account tools are not available on the local transport.
 
 **Claude Code (CLI)**
 
@@ -137,22 +159,8 @@ Configure **either** the hosted entry **or** the local entry — not both. If tw
 ## Signing in
 
 - **17 public tools** — no account, no key, nothing to sign in for. They call public, stateless, no-auth endpoints.
-- **6 `my_` account tools** — read your private monitoring data, so they require credentials:
-  - **Hosted endpoint → browser OAuth (recommended).** The server is an OAuth 2.1 resource server. Calling a `my_` tool without credentials returns a `401` with a `WWW-Authenticate` challenge, and OAuth-capable clients (Claude web/desktop, Claude Code, …) then walk you through a browser sign-in against the nslookup.io identity provider (Keycloak). Sign in once and the client remembers it. Everything else keeps working anonymously — you only sign in when you first reach for your own data.
-  - **API token (advanced / local).** Instead of OAuth you can pass a personal access token (created in the portal under *API Tokens*, format `nslk_...`) as `Authorization: Bearer nslk_...` on the hosted endpoint, or via the `NSLOOKUP_API_TOKEN` environment variable on the local/stdio transport. Note: personal access tokens are **not generally available yet**, so for account data today the hosted browser sign-in is the way.
-
-```jsonc
-// Local/stdio with an API token (when available):
-{
-  "mcpServers": {
-    "nslookup": {
-      "command": "npx",
-      "args": ["-y", "@nslookup-io/mcp-server"],
-      "env": { "NSLOOKUP_API_TOKEN": "nslk_..." }
-    }
-  }
-}
-```
+- **6 `my_` account tools** — read your private monitoring data, so they require sign-in:
+  - **Hosted endpoint → browser OAuth.** The server is an OAuth 2.1 resource server. Calling a `my_` tool without credentials returns a `401` with a `WWW-Authenticate` challenge, and OAuth-capable clients (Claude web/desktop, Claude Code, …) then walk you through a browser sign-in against the nslookup.io identity provider (Keycloak). **There is no API key** — sign in once and the client remembers it. Everything else keeps working anonymously — you only sign in when you first reach for your own data. See [Connect for your account (portal) tools](#connect-for-your-account-portal-tools).
 
 ## Tool reference
 
@@ -221,7 +229,6 @@ A, AAAA, AFSDB, APL, AXFR, CAA, CDNSKEY, CDS, CERT, CNAME, CSYNC, DHCID, DLV, DN
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
 | `NSLOOKUP_API_URL` | `https://www.nslookup.io` | Base URL for the nslookup.io API |
-| `NSLOOKUP_API_TOKEN` | — | Credential for the `my_` account tools when running locally (stdio): an `nslk_...` API token or a raw access token |
 | `MCP_RESOURCE_URL` | *(request-derived)* | (HTTP server) Explicit public origin of this resource server, used as the `issuer`/`resource`/`authorization_servers` value in OAuth metadata. When unset, the origin is derived from the incoming request (`X-Forwarded-Proto` + host). Set it to the fixed public URL (e.g. `https://mcp.nslookup.io`) in production. |
 | `KEYCLOAK_ISSUER` | `https://auth.nslookup.io/realms/nslookup-io` | (HTTP server) OAuth token issuer used to validate sign-in JWTs (JWKS, issuer, exp) |
 | `KEYCLOAK_REALM_URL` | *(= `KEYCLOAK_ISSUER`)* | (HTTP server) Keycloak realm base URL whose `/.well-known/openid-configuration` supplies the real `authorization_endpoint`/`token_endpoint`. For Keycloak this equals the issuer, so it rarely needs setting. |
