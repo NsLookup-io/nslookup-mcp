@@ -52,6 +52,37 @@
 |------|-------------|
 | `geo_checker` | Check a domain's GEO (Generative Engine Optimization) score — AI crawler access, structured data, entity signals, content extractability, and prioritized recommendations |
 
+### Your Account (Sign-in) Tools
+
+**NEW in v1.5.0** — six `my_` tools read your own [NsLookup.io monitoring account](https://www.nslookup.io/portal/) (uptime, DNS, WHOIS, SSL, propagation, BIMI/VMC monitors). They are always listed, but require authentication to call.
+
+| Tool | Description |
+|------|-------------|
+| `my_overview` | Account health snapshot — aggregated 0–100 score with per-subsystem breakdown, plus your limits/quota |
+| `my_monitors` | List all your monitors across every type (uptime, API, DNS, WHOIS, propagation, certificates, VMC) |
+| `my_incidents` | Open (or all recent) incidents across all monitoring types, with a per-status/per-source summary |
+| `my_uptime_history` | Uptime + response-time history for one monitor (by id or URL) over a configurable window |
+| `my_dns_changes` | Recent DNS changes on your monitored domains with their risk reviews (0–100 score, severity counts) |
+| `my_certificates` | SSL certificate expiry overview — alert-level counts and certificates sorted by soonest expiry |
+
+#### How authentication works
+
+- **Hosted connector (`https://mcp.nslookup.io/mcp`)** — OAuth 2.1. The server is an OAuth *resource server*: calling a `my_` tool without credentials returns a `401` with a `WWW-Authenticate` challenge pointing at `/.well-known/oauth-protected-resource`, and OAuth-capable MCP clients (Claude, etc.) then walk you through sign-in against the NsLookup.io identity provider. Everything else keeps working anonymously.
+- **API token** — instead of OAuth you can send a personal access token (created in the portal under *API Tokens*, format `nslk_...`) as `Authorization: Bearer nslk_...`.
+- **Local / stdio** — no OAuth flow; set the `NSLOOKUP_API_TOKEN` environment variable to an `nslk_...` token (or a raw access token) and the `my_` tools pick it up.
+
+```json
+{
+  "mcpServers": {
+    "nslookup": {
+      "command": "npx",
+      "args": ["-y", "@nslookup-io/mcp-server"],
+      "env": { "NSLOOKUP_API_TOKEN": "nslk_..." }
+    }
+  }
+}
+```
+
 ## Setup
 
 ### Claude Desktop — Remote Connector (Recommended)
@@ -67,7 +98,7 @@ The easiest way to get started. No installation required.
    - **URL:** `https://mcp.nslookup.io/mcp`
 6. Click **Add** to confirm
 
-Done — Claude can now use all 17 DNS, security, and health tools. Try asking _"Run a DNS health check on github.com"_.
+Done — Claude can now use all 17 public DNS, security, and health tools. Try asking _"Run a DNS health check on github.com"_. The first time you use a `my_` account tool, Claude will prompt you to sign in to your NsLookup.io account.
 
 ### ChatGPT
 
@@ -90,7 +121,7 @@ Any MCP-compatible client that supports Streamable HTTP transport can connect us
 https://mcp.nslookup.io/mcp
 ```
 
-No API key or authentication required.
+No API key or authentication required for the 17 public tools. The six `my_` account tools respond with a standard OAuth 2.1 challenge (RFC 9728 protected-resource metadata), so OAuth-capable clients offer sign-in automatically; alternatively pass `Authorization: Bearer nslk_...` with an API token.
 
 ---
 
@@ -166,6 +197,9 @@ A, AAAA, AFSDB, APL, AXFR, CAA, CDNSKEY, CDS, CERT, CNAME, CSYNC, DHCID, DLV, DN
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
 | `NSLOOKUP_API_URL` | `https://www.nslookup.io` | Base URL for the nslookup.io API |
+| `NSLOOKUP_API_TOKEN` | — | Credential for the `my_` account tools when running locally (stdio): an `nslk_...` API token or a raw access token |
+| `MCP_RESOURCE_URL` | `https://mcp.nslookup.io` | (HTTP server) Public URL of this resource server, used in OAuth metadata |
+| `KEYCLOAK_ISSUER` | `https://auth.nslookup.io/realms/nslookup-io` | (HTTP server) OAuth issuer used to validate sign-in tokens |
 
 ## Example Prompts
 
@@ -196,6 +230,15 @@ Once connected, try asking your AI assistant:
 - "Does easydmarc.com have a BIMI record?"
 - "Scan example.com's email security (SPF, DKIM, DMARC)"
 - "Is the nslookup-io status page reporting any incidents?"
+
+And once signed in to your NsLookup.io account:
+
+- "How healthy is my monitoring right now?"
+- "List all my monitors — anything down or expiring?"
+- "Do I have any open incidents?"
+- "Show me the uptime history for https://myapp.com over the last 48 hours"
+- "Any risky DNS changes on my domains recently?"
+- "Which of my SSL certificates expire soonest?"
 
 ## Feedback
 

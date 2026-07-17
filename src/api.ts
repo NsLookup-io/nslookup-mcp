@@ -8,6 +8,11 @@ export interface ApiOptions {
   timeout?: number;
   /** API prefix path, e.g. "/api", "/portal-api", "/scanner-api" */
   prefix?: string;
+  /**
+   * Bearer credential forwarded upstream as-is (Keycloak JWT or `nslk_` PAT).
+   * Used by the authenticated portal (`my_`) tools.
+   */
+  authToken?: string;
 }
 
 function buildUrl(path: string, options: ApiOptions = {}): string {
@@ -33,12 +38,15 @@ export async function apiGet(
   );
 
   try {
+    const headers: Record<string, string> = {
+      "User-Agent": "nslookup-mcp/1.0",
+      Accept: "application/json",
+    };
+    if (options.authToken) headers["Authorization"] = `Bearer ${options.authToken}`;
+
     const response = await fetch(url.toString(), {
       method: "GET",
-      headers: {
-        "User-Agent": "nslookup-mcp/1.0",
-        Accept: "application/json",
-      },
+      headers,
       signal: controller.signal,
     });
 
@@ -67,13 +75,16 @@ export async function apiPost(
   );
 
   try {
+    const headers: Record<string, string> = {
+      "User-Agent": "nslookup-mcp/1.0",
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+    if (options.authToken) headers["Authorization"] = `Bearer ${options.authToken}`;
+
     const response = await fetch(url.toString(), {
       method: "POST",
-      headers: {
-        "User-Agent": "nslookup-mcp/1.0",
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
+      headers,
       body: JSON.stringify(body),
       signal: controller.signal,
     });
